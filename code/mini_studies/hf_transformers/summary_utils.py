@@ -14,12 +14,12 @@ def read_dict_from_pkl(output_path):
     return output_dict
 
 
-def load_abstracts(n_papers=None):
+def load_abstracts(n_papers=None, path="../data/llm_inputs/paper_ids_text_pairs.pkl"):
     # load the paper_ids_text_pairs from the file
-    with open("../data/llm_inputs/paper_ids_text_pairs.pkl", 'rb') as f:
+    with open(path, 'rb') as f:
         paper_ids_text_pairs = pickle.load(f)
     if n_papers:
-        paper_ids_text_pairs = paper_ids_text_pairs[:n_papers]
+        paper_ids_text_pairs = list(paper_ids_text_pairs.items())[:n_papers]
     return paper_ids_text_pairs
 
 
