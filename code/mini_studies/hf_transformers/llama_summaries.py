@@ -3,7 +3,8 @@ import time
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
-from code.mini_studies.hf_transformers.summary_utils import load_abstracts, write_dict_to_pkl
+from code.mini_studies.hf_transformers.summary_utils import load_abstracts, write_dict_to_pkl, \
+    parse_and_save_llm_outputs, read_dict_from_pkl
 
 
 def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-Instruct"):
@@ -21,7 +22,9 @@ def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-In
 
     output_dict = {}
 
-    for paper_id, text in paper_ids_text_pairs:
+    for i, (paper_id, text) in enumerate(paper_ids_text_pairs):
+        if i % 10 == 0:
+            print(f"Processing paper {i + 1} of {len(paper_ids_text_pairs)}. Percent complete: {100 * (i + 1) / len(paper_ids_text_pairs):.2f}%")
         prompt = f"""
 Task: Based on the abstract provided, extract and label the following key details. Follow the structure exactly, keeping answers brief and specific. 
     Adhere strictly to the format.
@@ -75,6 +78,7 @@ Abstract:
         output_dict[paper_id] = response
 
         print(f"Paper ID: {paper_id}")
+        print(f"Abstract: {text}")
         print(f"{response}")
         print(f"Time taken: {toc - tic:.2f} seconds\n")
 
@@ -84,8 +88,15 @@ Abstract:
     return output_dict
 
 if __name__ == '__main__':
-    summaries = query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-Instruct")
-    # Optionally, you can load the summaries later using read_dict_from_pkl
-    # loaded_summaries = read_dict_from_pkl("../data/variables/llm_outputs/llm_summaries_transformers.pkl")
+    summaries = query_transformers_for_summaries(n_papers=100000, model_name="Qwen/Qwen2.5-7B-Instruct")
+
+
+    # load and parse the summaries
+    # parse_and_save_llm_outputs("../data/llm_outputs/llm_summaries_transformers.pkl", "../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
+    # loaded_summaries = read_dict_from_pkl("../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
+    # for paper_id, summary in loaded_summaries.items():
+    #     print(f"Paper ID: {paper_id}")
+    #     print(f"Summary: {summary}")
+    #     print("\n")
 
 
