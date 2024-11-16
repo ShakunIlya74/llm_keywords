@@ -25,14 +25,14 @@ def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-In
         prompt = f"""
 Task: Based on the abstract provided, extract and label the following key details. Follow the structure exactly, keeping answers brief and specific. 
     Adhere strictly to the format.
-    If any information is unclear or unavailable in the abstract, write "N/A" for that field.
+    If any information is unclear or unavailable in the abstract, write "None." for that field.
     Use the exact labels and formatting provided. Do not include comments or repeat the response.
 Details to Extract:
-    field_of_Paper: The primary academic discipline. [insert answer]
-    subfield: The main research category within the field. [insert answer]
-    sub_subfield: A narrower focus within the subfield. [insert answer]
-    keywords: A set of 3-5 words or phrases that describe the core topics, separated by commas. [insert answer]
-    method_name_shortname: The main technique or model name proposed in the abstract. [insert answer]
+    field_of_Paper: * The primary academic discipline. * [insert answer]
+    subfield: * The main research category within the field. * [insert answer]
+    sub_subfield: * A narrower focus within the subfield. * [insert answer]
+    keywords: * A set of 3-5 words or phrases that describe the core topics, separated by commas. * [insert answer]
+    method_name_shortname: * The main technique or model name proposed in the abstract. * [insert answer]
 Abstract:
     '{text}'
         """
