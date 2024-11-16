@@ -28,11 +28,11 @@ Task: Based on the abstract provided, extract and label the following key detail
     If any information is unclear or unavailable in the abstract, write "None." for that field.
     Use the exact labels and formatting provided. Do not include comments or repeat the response.
 Details to Extract:
-    field_of_Paper: * The primary academic discipline. * [insert answer]
-    subfield: * The main research category within the field. * [insert answer]
-    sub_subfield: * A narrower focus within the subfield. * [insert answer]
-    keywords: * A set of 3-5 words or phrases that describe the core topics, separated by commas. * [insert answer]
-    method_name_shortname: * The main technique or model name proposed in the abstract. * [insert answer]
+    field_of_Paper = * The primary academic discipline. * [insert answer]
+    subfield = * The main research category within the field. * [insert answer]
+    sub_subfield = * A narrower focus within the subfield. * [insert answer]
+    keywords = * A set of 3-5 words or phrases that describe the core topics, separated by commas. * [insert answer]
+    method_name_shortname = * The main technique or model name proposed in the abstract. * [insert answer]
 Abstract:
     '{text}'
         """
