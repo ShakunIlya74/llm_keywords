@@ -50,7 +50,8 @@ def visualize_field_hierarchy_nested(field_hierarchy):
 
     # Adjust layout
     fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
-
+    # save to html
+    fig.write_html("../data/llm_outputs/statistics/field_hierarchy_treemap.html")
     # Display the treemap
     fig.show()
 
