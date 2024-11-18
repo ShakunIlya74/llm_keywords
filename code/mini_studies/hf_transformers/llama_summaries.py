@@ -90,7 +90,6 @@ Abstract:
 if __name__ == '__main__':
     summaries = query_transformers_for_summaries(n_papers=100000, model_name="Qwen/Qwen2.5-7B-Instruct")
 
-
     # load and parse the summaries
     # parse_and_save_llm_outputs("../data/llm_outputs/llm_summaries_transformers.pkl", "../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
     # loaded_summaries = read_dict_from_pkl("../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
