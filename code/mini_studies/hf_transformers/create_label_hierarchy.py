@@ -155,8 +155,8 @@ def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keyw
 
     # Determine thresholds for popularity
     top_fields = field_counts.nlargest(20, "number_of_papers")["field"]
-    subfield_threshold = int(len(subfield_counts) * 0.1)
-    sub_subfield_threshold = int(len(sub_subfield_counts) * 0.01)
+    subfield_threshold = int(len(subfield_counts) * 0.15)
+    sub_subfield_threshold = int(len(sub_subfield_counts) * 0.05)
 
     top_subfields = subfield_counts.nlargest(subfield_threshold, "number_of_papers")["subfield"]
     top_sub_subfields = sub_subfield_counts.nlargest(sub_subfield_threshold, "number_of_papers")["sub_subfield"]
