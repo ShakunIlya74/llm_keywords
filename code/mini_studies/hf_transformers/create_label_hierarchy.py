@@ -126,7 +126,15 @@ import pickle
 from collections import Counter
 
 
-def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keywords/'):
+import numpy as np
+import pandas as pd
+
+def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keywords/',
+                        coverage_percentage_l1=0.2, coverage_percentage_l2=0.2):
+    """
+    Creates label layers for fields, subfields, and sub-subfields, filtering subfields and sub-subfields
+    to retain only the top labels that collectively account for at least 20% of the total papers.
+    """
     # Load summaries
     loaded_summaries = read_dict_from_pkl(llm_summaries_path)
     print(f"Loading {len(loaded_summaries)} summaries")
@@ -152,38 +160,52 @@ def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keyw
     sub_subfield_df = pd.DataFrame(sub_subfield_data, columns=["paper_id", "sub_subfield"])
 
     # Group and count occurrences
+    total_papers = len(loaded_summaries)
     field_counts = field_df.groupby("field").size().reset_index(name="number_of_papers")
     subfield_counts = subfield_df.groupby("subfield").size().reset_index(name="number_of_papers")
     sub_subfield_counts = sub_subfield_df.groupby("sub_subfield").size().reset_index(name="number_of_papers")
 
-    # Determine thresholds for popularity
-    top_fields = field_counts.nlargest(20, "number_of_papers")["field"]
-    subfield_threshold = int(len(subfield_counts) * 0.2)
-    sub_subfield_threshold = int(len(sub_subfield_counts) * 0.05)
+    # Sort counts in descending order
+    field_counts = field_counts.sort_values(by="number_of_papers", ascending=False)
+    subfield_counts = subfield_counts.sort_values(by="number_of_papers", ascending=False)
+    sub_subfield_counts = sub_subfield_counts.sort_values(by="number_of_papers", ascending=False)
 
-    top_subfields = subfield_counts.nlargest(subfield_threshold, "number_of_papers")["subfield"]
-    top_sub_subfields = sub_subfield_counts.nlargest(sub_subfield_threshold, "number_of_papers")["sub_subfield"]
+    # Determine top subfields and sub-subfields that cover at least 20% of papers
+    def get_top_labels(counts_df, total_papers, coverage_percentage):
+        cumulative_sum = 0
+        selected_labels = []
+        coverage_threshold = total_papers * coverage_percentage
+        for _, row in counts_df.iterrows():
+            cumulative_sum += row["number_of_papers"]
+            selected_labels.append(row["subfield"] if "subfield" in counts_df.columns else row["sub_subfield"])
+            if cumulative_sum >= coverage_threshold:
+                break
+        return selected_labels
 
-    # Map unpopular fields to 'Other'
-    field_df["field"] = field_df["field"].apply(lambda x: x if x in top_fields.values else "None")
-    subfield_df["subfield"] = subfield_df["subfield"].apply(lambda x: x if x in top_subfields.values else "None")
+    # determine the top n fields
+    top_fields = field_counts["field"].values[:20]
+    # determine the top subfields and sub-subfields
+    top_subfields = get_top_labels(subfield_counts, total_papers, coverage_percentage_l1)
+    top_sub_subfields = get_top_labels(sub_subfield_counts, total_papers, coverage_percentage_l2)
+
+    # Map unpopular labels to 'None'
+    field_df["field"] = field_df["field"].apply(lambda x: x if x in top_fields else "None")
+    subfield_df["subfield"] = subfield_df["subfield"].apply(lambda x: x if x in top_subfields else "None")
     sub_subfield_df["sub_subfield"] = sub_subfield_df["sub_subfield"].apply(
-        lambda x: x if x in top_sub_subfields.values else "None")
+        lambda x: x if x in top_sub_subfields else "None")
 
-    # save slice of the field column as np arrays to files for each layer
-    np.save(output_dir+'field_layer_random_cache', field_df["field"].values, allow_pickle=True)
-    np.save(output_dir+'subfield_layer_random_cache', subfield_df["subfield"].values, allow_pickle=True)
-    np.save(output_dir+'sub_subfield_layer_random_cache', sub_subfield_df["sub_subfield"].values, allow_pickle=True)
-    np.save(output_dir+'paper_ids_random_cache', field_df["paper_id"].values)
+    # Save processed layers to files
+    np.save(output_dir + 'field_layer_random_cache', field_df["field"].values, allow_pickle=True)
+    np.save(output_dir + 'subfield_layer_random_cache', subfield_df["subfield"].values, allow_pickle=True)
+    np.save(output_dir + 'sub_subfield_layer_random_cache', sub_subfield_df["sub_subfield"].values, allow_pickle=True)
+    np.save(output_dir + 'paper_ids_random_cache', field_df["paper_id"].values)
 
-    # print number of unique values in each layer
+    # Print summary statistics
     print("Number of unique values in each layer:")
     print("Field:", len(field_df["field"].unique()))
     print("Subfield:", len(subfield_df["subfield"].unique()))
     print("Sub-subfield:", len(sub_subfield_df["sub_subfield"].unique()))
 
-
-import numpy as np
 
 
 def filter_repeating_subfields():
@@ -211,6 +233,10 @@ def filter_repeating_subfields():
     # Perform substitutions
     label_layer2[matrix_for_labels1] = 'None'
     label_layer3[matrix_for_labels2] = 'None'
+
+    # replace 'None.' with 'None'
+    label_layer2 = np.where(label_layer2 == 'None.', 'None', label_layer2)
+    label_layer3 = np.where(label_layer3 == 'None.', 'None', label_layer3)
 
     # Save updated layers
     np.save(SI_VARS_PATH / "subfield_layer_random_cache", label_layer2)
@@ -240,7 +266,9 @@ if __name__ == '__main__':
     # output = parse_hierarchy_from_top_labels("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", top_fields=20, percent_of_top_subfields=0.3)
     # print(len(output["Computer Science"]["subfields"].keys()), [(subfield, output["Computer Science"]["subfields"][subfield]["number_of_papers"]) for subfield in output["Computer Science"]["subfields"].keys()])
 
-    # create_label_layers("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", output_dir='../../scholar_inbox/data/scholar_map/variables/')
+    create_label_layers("../data/llm_outputs/llm_summaries_transformers_parsed.pkl",
+                        output_dir='../../scholar_inbox/data/scholar_map/variables/',
+                        coverage_percentage_l1=0.65, coverage_percentage_l2=0.6)
     filter_repeating_subfields()
 
 
