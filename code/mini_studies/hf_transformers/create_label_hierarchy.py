@@ -1,4 +1,5 @@
 import pickle
+from pathlib import Path
 
 import numpy as np
 
@@ -11,6 +12,8 @@ from code.mini_studies.hf_transformers.summary_utils import parse_and_save_llm_o
 #             "sub subfield": None,
 #             "keywords": None,
 #             "method name  / shortname": None,
+
+SI_VARS_PATH = Path("../../scholar_inbox/data/scholar_map/variables")
 
 
 
@@ -155,7 +158,7 @@ def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keyw
 
     # Determine thresholds for popularity
     top_fields = field_counts.nlargest(20, "number_of_papers")["field"]
-    subfield_threshold = int(len(subfield_counts) * 0.15)
+    subfield_threshold = int(len(subfield_counts) * 0.2)
     sub_subfield_threshold = int(len(sub_subfield_counts) * 0.05)
 
     top_subfields = subfield_counts.nlargest(subfield_threshold, "number_of_papers")["subfield"]
@@ -180,6 +183,56 @@ def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keyw
     print("Sub-subfield:", len(sub_subfield_df["sub_subfield"].unique()))
 
 
+import numpy as np
+
+
+def filter_repeating_subfields():
+    """
+    Replaces repeating subfields with 'None' and prints the number of substitutions made.
+    """
+    # Load layers
+    label_layer1 = np.load(SI_VARS_PATH / "field_layer_random_cache.npy", allow_pickle=True)
+    label_layer2 = np.load(SI_VARS_PATH / "subfield_layer_random_cache.npy", allow_pickle=True)
+    label_layer3 = np.load(SI_VARS_PATH / "sub_subfield_layer_random_cache.npy", allow_pickle=True)
+
+    # Ensure labels are in string format
+    label_layer1 = label_layer1.astype(str)
+    label_layer2 = label_layer2.astype(str)
+    label_layer3 = label_layer3.astype(str)
+
+    # Substitution masks
+    matrix_for_labels1 = np.isin(label_layer2, label_layer1)
+    matrix_for_labels2 = np.isin(label_layer3, label_layer2)
+
+    # Count substitutions
+    substitutions_layer2 = np.sum(matrix_for_labels1)
+    substitutions_layer3 = np.sum(matrix_for_labels2)
+
+    # Perform substitutions
+    label_layer2[matrix_for_labels1] = 'None'
+    label_layer3[matrix_for_labels2] = 'None'
+
+    # Save updated layers
+    np.save(SI_VARS_PATH / "subfield_layer_random_cache", label_layer2)
+    np.save(SI_VARS_PATH / "sub_subfield_layer_random_cache", label_layer3)
+
+    # Print debug information
+    print("Number of substitutions made:")
+    print(f"Subfield layer: {substitutions_layer2}")
+    print(f"Sub-subfield layer: {substitutions_layer3}")
+
+    print("\nNumber of unique values in each layer after substitution:")
+    print("Field:", len(np.unique(label_layer1)))
+    print("Subfield:", len(np.unique(label_layer2)))
+    print("Sub-subfield:", len(np.unique(label_layer3)))
+
+    # Check specific example
+    print("\nDebug checks:")
+    print("Natural Language Processing in Field:", "Natural Language Processing" in label_layer1)
+    print("Natural Language Processing in Subfield:", "Natural Language Processing" in label_layer2)
+    print("Natural Language Processing in Sub-subfield:", "Natural Language Processing" in label_layer3)
+
+
 if __name__ == '__main__':
     # parse_and_save_llm_outputs("../data/llm_outputs/llm_summaries_transformers.pkl", "../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
     # get_sorted_occurrence_dict("../data/llm_outputs/llm_summaries_transformers_parsed_temp.pkl")
@@ -187,7 +240,19 @@ if __name__ == '__main__':
     # output = parse_hierarchy_from_top_labels("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", top_fields=20, percent_of_top_subfields=0.3)
     # print(len(output["Computer Science"]["subfields"].keys()), [(subfield, output["Computer Science"]["subfields"][subfield]["number_of_papers"]) for subfield in output["Computer Science"]["subfields"].keys()])
 
-    create_label_layers("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", output_dir='../../scholar_inbox/data/scholar_map/variables/')
+    # create_label_layers("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", output_dir='../../scholar_inbox/data/scholar_map/variables/')
+    filter_repeating_subfields()
+
+
+    # label_layer1 = np.load(SI_VARS_PATH / "field_layer_random_cache.npy", allow_pickle=True)
+    # label_layer2 = np.load(SI_VARS_PATH / "subfield_layer_random_cache.npy", allow_pickle=True)
+    # label_layer3 = np.load(SI_VARS_PATH / "sub_subfield_layer_random_cache.npy", allow_pickle=True)
+    #
+    # # check if 'Natural Language Processing' is in the subfield layer
+    # print("Natural Language Processing" in label_layer1)
+    # print("Natural Language Processing" in label_layer2)
+    # print("Natural Language Processing" in label_layer3)
+
 
 
 
