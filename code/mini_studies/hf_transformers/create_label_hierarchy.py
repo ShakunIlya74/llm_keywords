@@ -1,3 +1,7 @@
+import pickle
+
+import numpy as np
+
 from code.mini_studies.hf_transformers.summary_utils import parse_and_save_llm_outputs, read_dict_from_pkl, \
     write_dict_to_pkl
 
@@ -57,6 +61,7 @@ def get_sorted_occurrence_dict(path_to_parsed_llm_outputs):
     write_dict_to_pkl(sorted_sub_subfield_occurrences, "../data/llm_outputs/statistics/sub_subfield_occurrences.pkl")
     write_dict_to_pkl(sorted_keywords_occurrences, "../data/llm_outputs/statistics/keywords_occurrences.pkl")
     write_dict_to_pkl(sorted_method_name_occurrences, "../data/llm_outputs/statistics/method_name_occurrences.pkl")
+    return sorted_field_of_paper_occurrences, sorted_subfield_occurrences, sorted_sub_subfield_occurrences, sorted_keywords_occurrences, sorted_method_name_occurrences
 
 
 
@@ -98,28 +103,95 @@ def parse_hierarchy_from_top_labels(path_to_parsed_llm_outputs, top_fields=20, p
     return field_hierarchy
 
 
+# def create_label_layers(llm_summaries_path, output_dir):
+#     loaded_summaries = read_dict_from_pkl(llm_summaries_path)
+#     print(f"Loading {len(loaded_summaries)} summaries")
+#     # write keys to the pickle file
+#     with open(output_dir+'paper_ids_for_labels.pkl', 'wb') as f:
+#         pickle.dump(loaded_summaries.keys(), f)
+#     fields, subfields, sub_subfields, keywords, method_names = get_sorted_occurrence_dict(llm_summaries_path)
+#
+#     # create pd df with paper_ids, fields, number of papers
 
 
+import pandas as pd
+import pickle
+from collections import Counter
+
+import pandas as pd
+import pickle
+from collections import Counter
 
 
+def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keywords/'):
+    # Load summaries
+    loaded_summaries = read_dict_from_pkl(llm_summaries_path)
+    print(f"Loading {len(loaded_summaries)} summaries")
 
+    # Initialize lists to collect data for the DataFrames
+    field_data = []
+    subfield_data = []
+    sub_subfield_data = []
 
+    # Collect occurrences
+    for paper_id, details in loaded_summaries.items():
+        field = details.get("field of paper", "Unknown")
+        subfield = details.get("subfield", "Unknown")
+        sub_subfield = details.get("sub subfield", "Unknown")
 
+        field_data.append((paper_id, field))
+        subfield_data.append((paper_id, subfield))
+        sub_subfield_data.append((paper_id, sub_subfield))
+
+    # Create DataFrames
+    field_df = pd.DataFrame(field_data, columns=["paper_id", "field"])
+    subfield_df = pd.DataFrame(subfield_data, columns=["paper_id", "subfield"])
+    sub_subfield_df = pd.DataFrame(sub_subfield_data, columns=["paper_id", "sub_subfield"])
+
+    # Group and count occurrences
+    field_counts = field_df.groupby("field").size().reset_index(name="number_of_papers")
+    subfield_counts = subfield_df.groupby("subfield").size().reset_index(name="number_of_papers")
+    sub_subfield_counts = sub_subfield_df.groupby("sub_subfield").size().reset_index(name="number_of_papers")
+
+    # Determine thresholds for popularity
+    top_fields = field_counts.nlargest(20, "number_of_papers")["field"]
+    subfield_threshold = int(len(subfield_counts) * 0.1)
+    sub_subfield_threshold = int(len(sub_subfield_counts) * 0.01)
+
+    top_subfields = subfield_counts.nlargest(subfield_threshold, "number_of_papers")["subfield"]
+    top_sub_subfields = sub_subfield_counts.nlargest(sub_subfield_threshold, "number_of_papers")["sub_subfield"]
+
+    # Map unpopular fields to 'Other'
+    field_df["field"] = field_df["field"].apply(lambda x: x if x in top_fields.values else "None")
+    subfield_df["subfield"] = subfield_df["subfield"].apply(lambda x: x if x in top_subfields.values else "None")
+    sub_subfield_df["sub_subfield"] = sub_subfield_df["sub_subfield"].apply(
+        lambda x: x if x in top_sub_subfields.values else "None")
+
+    # save slice of the field column as np arrays to files for each layer
+    np.save(output_dir+'field_layer_random_cache', field_df["field"].values, allow_pickle=True)
+    np.save(output_dir+'subfield_layer_random_cache', subfield_df["subfield"].values, allow_pickle=True)
+    np.save(output_dir+'sub_subfield_layer_random_cache', sub_subfield_df["sub_subfield"].values, allow_pickle=True)
+    np.save(output_dir+'paper_ids_random_cache', field_df["paper_id"].values)
+
+    # print number of unique values in each layer
+    print("Number of unique values in each layer:")
+    print("Field:", len(field_df["field"].unique()))
+    print("Subfield:", len(subfield_df["subfield"].unique()))
+    print("Sub-subfield:", len(sub_subfield_df["sub_subfield"].unique()))
 
 
 if __name__ == '__main__':
-    # parse_and_save_llm_outputs("../data/llm_outputs/llm_summaries_transformers_temp.pkl", "../data/llm_outputs/llm_summaries_transformers_parsed_temp.pkl")
+    # parse_and_save_llm_outputs("../data/llm_outputs/llm_summaries_transformers.pkl", "../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
     # get_sorted_occurrence_dict("../data/llm_outputs/llm_summaries_transformers_parsed_temp.pkl")
 
-    output = parse_hierarchy_from_top_labels("../data/llm_outputs/llm_summaries_transformers_parsed_temp.pkl", top_fields=20, percent_of_top_subfields=0.3)
-    print(len(output["Computer Science"]["subfields"].keys()), [(subfield, output["Computer Science"]["subfields"][subfield]["number_of_papers"]) for subfield in output["Computer Science"]["subfields"].keys()])
-    # field_of_paper_occurrences = read_dict_from_pkl("../data/llm_outputs/statistics/field_of_paper_occurrences.pkl")
-    # subfield_occurrences = read_dict_from_pkl("../data/llm_outputs/statistics/subfield_occurrences.pkl")
-    # sub_subfield_occurrences = read_dict_from_pkl("../data/llm_outputs/statistics/sub_subfield_occurrences.pkl")
-    # keywords_occurrences = read_dict_from_pkl("../data/llm_outputs/statistics/keywords_occurrences.pkl")
-    # method_name_occurrences = read_dict_from_pkl("../data/llm_outputs/statistics/method_name_occurrences.pkl")
-    # print("field_of_paper_occurrences:", list(field_of_paper_occurrences.items())[:20])
+    # output = parse_hierarchy_from_top_labels("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", top_fields=20, percent_of_top_subfields=0.3)
+    # print(len(output["Computer Science"]["subfields"].keys()), [(subfield, output["Computer Science"]["subfields"][subfield]["number_of_papers"]) for subfield in output["Computer Science"]["subfields"].keys()])
+
+    create_label_layers("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", output_dir='../../scholar_inbox/data/scholar_map/variables/')
 
 
-    # print("subfield_occurrences:", subfield_occurrences)
-    # print("sub_subfield_occurrences:", sub_subfield_occurrences)
+
+
+
+
+    pass
