@@ -1,3 +1,4 @@
+import json
 import pickle
 from pathlib import Path
 
@@ -182,6 +183,9 @@ def create_label_layers(llm_summaries_path, output_dir='../data/llm_outputs/keyw
                 break
         return selected_labels
 
+    np.save(output_dir + 'field_layer_random_cache_pure', field_df["field"].values, allow_pickle=True)
+    np.save(output_dir + 'subfield_layer_random_cache_pure', subfield_df["subfield"].values, allow_pickle=True)
+    np.save(output_dir + 'sub_subfield_layer_random_cache_pure', sub_subfield_df["sub_subfield"].values, allow_pickle=True)
     # determine the top n fields
     top_fields = field_counts["field"].values[:20]
     # determine the top subfields and sub-subfields
@@ -262,6 +266,16 @@ def filter_repeating_subfields():
 if __name__ == '__main__':
     # parse_and_save_llm_outputs("../data/llm_outputs/llm_summaries_transformers.pkl", "../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
     # get_sorted_occurrence_dict("../data/llm_outputs/llm_summaries_transformers_parsed_temp.pkl")
+    # outputs = read_dict_from_pkl("../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
+    # print(len(outputs))
+    # # filter all from Computer science field
+    # outputs = {key: value for key, value in outputs.items() if value["field of paper"] == "Computer Science"}
+    # # filter firt 100
+    # outputs = dict(list(outputs.items())[:100])
+    # print(len(outputs))
+    # # save to new json file
+    # with open("../../scholar_inbox/data/scholar_map/llm_outputs/llm_output_cs_sample.json", "w") as f:
+    #     json.dump(outputs, f)
 
     # output = parse_hierarchy_from_top_labels("../data/llm_outputs/llm_summaries_transformers_parsed.pkl", top_fields=20, percent_of_top_subfields=0.3)
     # print(len(output["Computer Science"]["subfields"].keys()), [(subfield, output["Computer Science"]["subfields"][subfield]["number_of_papers"]) for subfield in output["Computer Science"]["subfields"].keys()])
