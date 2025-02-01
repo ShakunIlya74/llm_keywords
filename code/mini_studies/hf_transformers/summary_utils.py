@@ -124,6 +124,7 @@ def parse_and_save_llm_outputs(output_path, save_to_path):
     outputs = read_dict_from_pkl(output_path)
     parsed_results = parse_llm_outputs_flexible(outputs)
     write_dict_to_pkl(parsed_results, save_to_path)
+    return parsed_results
 
 
 

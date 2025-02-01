@@ -26,6 +26,24 @@ def prompt_with_text(text):
     return prompt
 
 
+def new_prompt_with_text(text):
+    prompt = f"""
+    Task: Based on the abstract provided, extract and label the following key details. Follow the structure exactly, keeping answers brief and specific. 
+        Adhere strictly to the format.
+        If any information is unclear or unavailable in the abstract, write "None." for that field.
+        Use the exact labels and formatting provided. Do not include comments. Do not repeat the response.
+    Details to Extract:
+        field_of_Paper = * The primary academic discipline. * [insert answer]
+        subfield = * The main research category within the field. * [insert answer]
+        sub_subfield = * A narrower focus within the subfield. * [insert answer]
+        keywords = * A set of 3-5 words or phrases that describe the core topics, separated by commas. * [insert answer]
+        method_name_shortname = * The main technique or model name proposed in the abstract. * [insert answer]
+    Abstract:
+    '{text}'
+    """
+    return prompt
+
+
 def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-Instruct", prompt_fn=prompt_with_text,
                                      paper_ids_text_pairs_path="../data/llm_inputs/paper_ids_text_pairs.pkl",
                                      output_path="../data/llm_outputs/llm_summaries.pkl",
@@ -132,12 +150,147 @@ def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-In
     return output_dict
 
 
+def compare_two_runs(n_papers,
+                     model_params1, model_params2,
+                     prompt_fn1, prompt_fn2,
+                     output_path1, output_path2,
+                     model_name="Qwen/Qwen2.5-7B-Instruct",
+                     paper_ids_text_pairs_path="../data/llm_inputs/paper_ids_text_pairs.pkl",
+                     checkpoint_freq=10,
+                     run_inference=True):
+    """
+    Compare two runs of query_transformers_for_summaries on the same set of papers.
+
+    Args:
+        n_papers (int): Number of papers to process.
+        model_params1 (dict): Model parameters for the first run.
+        model_params2 (dict): Model parameters for the second run.
+        prompt_fn1 (callable): Prompt function for the first run.
+        prompt_fn2 (callable): Prompt function for the second run.
+        output_path1 (str): Path to save outputs for the first run.
+        output_path2 (str): Path to save outputs for the second run.
+        model_name (str): Name of the model to use.
+        paper_ids_text_pairs_path (str): Path to the pickle file containing paper IDs and texts.
+        checkpoint_freq (int): Frequency of checkpoints when processing.
+        run_inference (bool): Whether to run inference or not. If not - only comparison on saved outputs will be done.
+
+    Returns:
+        None. The function saves two output files and prints a comparison of results.
+    """
+    if run_inference:
+        # Run 1: Using prompt_fn1 and model_params1
+        print("Starting Run 1...")
+        start_time_run1 = time.time()
+        outputs1 = query_transformers_for_summaries(
+            n_papers=n_papers,
+            model_name=model_name,
+            prompt_fn=prompt_fn1,
+            paper_ids_text_pairs_path=paper_ids_text_pairs_path,
+            output_path=output_path1,
+            checkpoint_freq=checkpoint_freq,
+            model_params=model_params1
+        )
+        end_time_run1 = time.time()
+
+        # Run 2: Using prompt_fn2 and model_params2
+        print("\nStarting Run 2...")
+        start_time_run2 = time.time()
+        outputs2 = query_transformers_for_summaries(
+            n_papers=n_papers,
+            model_name=model_name,
+            prompt_fn=prompt_fn2,
+            paper_ids_text_pairs_path=paper_ids_text_pairs_path,
+            output_path=output_path2,
+            checkpoint_freq=checkpoint_freq,
+            model_params=model_params2
+        )
+        end_time_run2 = time.time()
+        print(f"Run 1 completed in {end_time_run1 - start_time_run1:.2f} seconds")
+        print(f"Run 2 completed in {end_time_run2 - start_time_run2:.2f} seconds")
+
+    abstracts_dict = dict(load_abstracts(n_papers, paper_ids_text_pairs_path))
+
+    parsed_output1 = parse_and_save_llm_outputs(output_path1,
+                               output_path1+"_parsed.pkl")
+    parsed_output2 = parse_and_save_llm_outputs(output_path2,
+                                 output_path2+"_parsed.pkl")
+
+
+    # Compare outputs for each paper by printing them side by side
+    print("\nComparing outputs for each paper:")
+    all_paper_ids = set(parsed_output1.keys()).union(parsed_output2.keys())
+    differences = {
+            "field of paper": 0,
+            "subfield": 0,
+            "sub subfield": 0,
+            "keywords": 0,
+            "method name  / shortname": 0,
+        }
+    for paper_id in sorted(all_paper_ids):
+        result1 = parsed_output1.get(paper_id, {})
+        result2 = parsed_output2.get(paper_id, {})
+        diff_found = False
+        # compare each field in dict and print if different
+        for key in differences.keys():
+            if result1.get(key) != result2.get(key):
+                differences[key] += 1
+                if not diff_found:
+                    print(f"Paper ID: {paper_id}")
+                    print(f"Abstract: {abstracts_dict.get(paper_id)}")
+                    diff_found = True
+                print(f"Field: {key}")
+                print(f"Run 1: {result1.get(key)}")
+                print(f"Run 2: {result2.get(key)}")
+                print("\n")
+        if diff_found:
+            print("---------------------\n")
+    print("\nSummary of differences:")
+    for key, value in differences.items():
+        print(f"{key}: {value} papers with different values.")
+    print("\n")
+
+
+
+def run_comparison(n_papers=10, delete_existing_outputs=False):
+
+    model_params1 = {
+        "max_new_tokens": 512,
+        "temperature": None,
+        "top_k": None,
+        "top_p": None,
+        "repetition_penalty": None,
+        "do_sample": False}
+    model_params2 = {
+        "max_new_tokens": 512,
+        "temperature": None,
+        "top_k": None,
+        "top_p": None,
+        "repetition_penalty": 1.2,
+        "do_sample": False}
+
+    prompt_fn1 = prompt_with_text
+    prompt_fn2 = prompt_with_text
+
+    output_path1 = "../data/llm_outputs/llm_summaries_test1.pkl"
+    output_path2 = "../data/llm_outputs/llm_summaries_test2.pkl"
+
+    if delete_existing_outputs:
+        for output_path in [output_path1, output_path2]:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+
+    compare_two_runs(n_papers, model_params1, model_params2, prompt_fn1, prompt_fn2, output_path1, output_path2)
+
+
+
 
 if __name__ == '__main__':
-    summaries = query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-Instruct",
-                                                 prompt_fn=prompt_with_text,
-                                                 output_path="../data/llm_outputs/llm_summaries_test.pkl",
-                                                 checkpoint_freq=1)
+    # summaries = query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-Instruct",
+    #                                              prompt_fn=prompt_with_text,
+    #                                              output_path="../data/llm_outputs/llm_summaries_test.pkl",
+    #                                              checkpoint_freq=1)
+
+    run_comparison(n_papers=10, delete_existing_outputs=True)
 
 
     # load and parse the summaries
