@@ -1,3 +1,4 @@
+import json
 import pickle
 import re
 from typing import Dict, Optional, Any
@@ -13,13 +14,26 @@ def read_dict_from_pkl(output_path):
         output_dict = pickle.load(f)
     return output_dict
 
+def read_dict_from_json(output_path):
+    with open(output_path, 'r') as f:
+        output_dict = json.load(f)
+    return output_dict
+
+def read_dict(output_path):
+    if output_path.endswith('.pkl'):
+        return read_dict_from_pkl(output_path)
+    elif output_path.endswith('.json'):
+        return read_dict_from_json(output_path)
+    else:
+        raise ValueError(f"Unsupported file format: {output_path}")
+
 
 def load_abstracts(n_papers=None, path="../data/llm_inputs/paper_ids_text_pairs.pkl"):
     # load the paper_ids_text_pairs from the file
     with open(path, 'rb') as f:
         paper_ids_text_pairs = pickle.load(f)
     if n_papers:
-        paper_ids_text_pairs = list(paper_ids_text_pairs.items())[:n_papers]
+        paper_ids_text_pairs = list(paper_ids_text_pairs)[:n_papers]
     return paper_ids_text_pairs
 
 
@@ -98,6 +112,12 @@ def parse_llm_outputs_flexible(outputs: Dict[int, str]) -> Dict[int, Dict[str, O
         parsed_results[id_key] = parsed_fields
 
     return parsed_results
+
+def create_dirs_if_not_exist():
+    import os
+    dirs = ['../data/llm_inputs', '../data/llm_outputs', '../data/llm_outputs/keywords', '../data/llm_outputs/statistics']
+    for dir in dirs:
+        os.makedirs(dir, exist_ok=True)
 
 
 def parse_and_save_llm_outputs(output_path, save_to_path):
