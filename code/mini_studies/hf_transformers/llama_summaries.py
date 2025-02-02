@@ -1,5 +1,6 @@
 import os
 import time
+import gc
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
@@ -72,7 +73,6 @@ def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-In
 
     """
     create_dirs_if_not_exist()
-    # Step 1: Retrieve Paper IDs
     paper_ids_text_pairs = load_abstracts(n_papers, paper_ids_text_pairs_path)
     # check if output file already exists
     output_dict = {}
@@ -80,42 +80,25 @@ def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-In
         print(f"Output file already exists at {output_path}. Continuing from where it left off.")
         paper_summaries = read_dict(output_path)
         processed_paper_ids = set(paper_summaries.keys())
-        paper_ids_to_process = set([paper_id for paper_id, _ in paper_ids_text_pairs]) - processed_paper_ids
-        print(f"Processed {len(processed_paper_ids)} papers. {len(paper_ids_to_process)} papers left to process.")
-        paper_ids_text_pairs = [(paper_id, text) for paper_id, text in paper_ids_text_pairs if paper_id in paper_ids_to_process]
+        paper_ids_text_pairs = [(paper_id, text) for paper_id, text in paper_ids_text_pairs if paper_id not in processed_paper_ids]
         output_dict = paper_summaries
 
-    # Step 3: Initialize Transformer Model and Tokenizer
+    # Initialize the model and tokenizer, ensuring model is on GPU
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype="auto",
-        device_map="auto"
+        torch_dtype="auto"  # removed device_map to avoid offloading
     )
+    model = model.to("cuda")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    # filter out None params
-    # model_params = {k: v for k, v in model_params.items() if v is not None}
 
     for i, (paper_id, text) in enumerate(paper_ids_text_pairs):
         if i % 10 == 0:
             print(f"Processing paper {i + 1} of {len(paper_ids_text_pairs)}. Percent complete: {100 * (i + 1) / len(paper_ids_text_pairs):.2f}%")
         prompt = prompt_fn(text)
 
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": prompt},
-        ]
-
-        # Prepare the prompt using the chat template
-        combined_prompt = ""
-        for message in messages:
-            if message["role"] == "system":
-                combined_prompt += f"{message['content']}\n"
-            elif message["role"] == "user":
-                combined_prompt += f"{message['content']}\n"
-
-        # Tokenize the prompt
+        # Prepare the combined prompt
+        combined_prompt = f"You are a helpful assistant.\n{prompt}\n"
         model_inputs = tokenizer([combined_prompt], return_tensors="pt").to(device)
 
         # Generate the response with default parameters
@@ -131,21 +114,18 @@ def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-In
         generated_ids = [
             output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
         ]
-
         response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-
-        # Store the result
         output_dict[paper_id] = response
 
-        print(f"Paper ID: {paper_id}")
-        print(f"Abstract: {text}")
-        print(f"{response}")
-        print(f"Time taken: {toc - tic:.2f} seconds\n")
+        print(f"Paper ID: {paper_id}\nAbstract: {text}\n{response}\nTime taken: {toc - tic:.2f} seconds\n")
 
         if (i + 1) % checkpoint_freq == 0:
-            # Save the output dictionary to a pickle file
             write_dict_to_pkl(output_dict, output_path)
     write_dict_to_pkl(output_dict, output_path)
+
+    # Optionally free model and tokenizer memory at the end of the function
+    del model, tokenizer
+    torch.cuda.empty_cache()
 
     return output_dict
 
@@ -191,6 +171,10 @@ def compare_two_runs(n_papers,
             model_params=model_params1
         )
         end_time_run1 = time.time()
+
+        gc.collect()
+        torch.cuda.empty_cache()
+        print("Cleared GPU resources after Run 1.")
 
         # Run 2: Using prompt_fn2 and model_params2
         print("\nStarting Run 2...")
@@ -238,10 +222,7 @@ def compare_two_runs(n_papers,
                     print(f"Paper ID: {paper_id}")
                     print(f"Abstract: {abstracts_dict.get(paper_id)}")
                     diff_found = True
-                print(f"Field: {key}")
-                print(f"Run 1: {result1.get(key)}")
-                print(f"Run 2: {result2.get(key)}")
-                print("\n")
+                print(f"{key}:\nRun 1: {result1.get(key)} \nRun 2: {result2.get(key)}")
         if diff_found:
             print("---------------------\n")
     print("\nSummary of differences:")
@@ -251,7 +232,7 @@ def compare_two_runs(n_papers,
 
 
 
-def run_comparison(n_papers=10, delete_existing_outputs=False):
+def run_comparison(n_papers=10, delete_existing_outputs=False, run_inference=True):
 
     model_params1 = {
         "max_new_tokens": 512,
@@ -265,7 +246,7 @@ def run_comparison(n_papers=10, delete_existing_outputs=False):
         "temperature": None,
         "top_k": None,
         "top_p": None,
-        "repetition_penalty": 1.2,
+        "repetition_penalty": 1.1,
         "do_sample": False}
 
     prompt_fn1 = prompt_with_text
@@ -279,7 +260,8 @@ def run_comparison(n_papers=10, delete_existing_outputs=False):
             if os.path.exists(output_path):
                 os.remove(output_path)
 
-    compare_two_runs(n_papers, model_params1, model_params2, prompt_fn1, prompt_fn2, output_path1, output_path2)
+    compare_two_runs(n_papers, model_params1, model_params2, prompt_fn1, prompt_fn2, output_path1, output_path2,
+                     run_inference=run_inference)
 
 
 
@@ -290,7 +272,7 @@ if __name__ == '__main__':
     #                                              output_path="../data/llm_outputs/llm_summaries_test.pkl",
     #                                              checkpoint_freq=1)
 
-    run_comparison(n_papers=10, delete_existing_outputs=True)
+    run_comparison(n_papers=100, delete_existing_outputs=True, run_inference=True)
 
 
     # load and parse the summaries
