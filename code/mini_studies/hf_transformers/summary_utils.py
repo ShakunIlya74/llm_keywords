@@ -115,7 +115,8 @@ def parse_llm_outputs_flexible(outputs: Dict[int, str]) -> Dict[int, Dict[str, O
 
 def create_dirs_if_not_exist():
     import os
-    dirs = ['../data/llm_inputs', '../data/llm_outputs', '../data/llm_outputs/keywords', '../data/llm_outputs/statistics']
+    dirs = ['../data/llm_inputs', '../data/llm_outputs', '../data/llm_outputs/keywords', '../data/llm_outputs/statistics',
+            '../data/llm_outputs/parsed_summaries',]
     for dir in dirs:
         os.makedirs(dir, exist_ok=True)
 

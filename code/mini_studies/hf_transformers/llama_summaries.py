@@ -29,16 +29,40 @@ def prompt_with_text(text):
 
 def new_prompt_with_text(text):
     prompt = f"""
-    Task: Based on the abstract provided, extract and label the following key details. Follow the structure exactly, keeping answers brief and specific. 
+    Task: Based on the abstract provided, extract and label the following key details. Follow the structure exactly, keeping answers brief and specific.
         Adhere strictly to the format.
         If any information is unclear or unavailable in the abstract, write "None." for that field.
         Use the exact labels and formatting provided. Do not include comments. Do not repeat the response.
+
+    Note: For the field_of_Paper, choose one from the following list of academic disciplines:
+        Mathematics
+        Physics
+        Chemistry
+        Computer Science
+        Electrical Engineering
+        Engineering
+        Materials Science
+        Astronomy
+        Earth Science
+        Biology
+        Medicine
+        Economics
+        Political Science
+        Sociology
+        Psychology
+        Linguistics
+        Philosophy
+        History
+        Geography
+        Arts
+
     Details to Extract:
-        field_of_Paper = * The primary academic discipline. * [insert answer]
+        field_of_Paper = * The primary academic discipline from the list above. * [insert answer]
         subfield = * The main research category within the field. * [insert answer]
         sub_subfield = * A narrower focus within the subfield. * [insert answer]
         keywords = * A set of 3-5 words or phrases that describe the core topics, separated by commas. * [insert answer]
         method_name_shortname = * The main technique or model name proposed in the abstract. * [insert answer]
+
     Abstract:
     '{text}'
     """
@@ -239,7 +263,7 @@ def run_comparison(n_papers=10, delete_existing_outputs=False, run_inference=Tru
         "temperature": None,
         "top_k": None,
         "top_p": None,
-        "repetition_penalty": None,
+        "repetition_penalty": 1.1,
         "do_sample": False}
     model_params2 = {
         "max_new_tokens": 512,
@@ -250,7 +274,7 @@ def run_comparison(n_papers=10, delete_existing_outputs=False, run_inference=Tru
         "do_sample": False}
 
     prompt_fn1 = prompt_with_text
-    prompt_fn2 = prompt_with_text
+    prompt_fn2 = new_prompt_with_text
 
     output_path1 = "../data/llm_outputs/llm_summaries_test1.pkl"
     output_path2 = "../data/llm_outputs/llm_summaries_test2.pkl"
@@ -267,12 +291,19 @@ def run_comparison(n_papers=10, delete_existing_outputs=False, run_inference=Tru
 
 
 if __name__ == '__main__':
-    # summaries = query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-Instruct",
-    #                                              prompt_fn=prompt_with_text,
-    #                                              output_path="../data/llm_outputs/llm_summaries_test.pkl",
-    #                                              checkpoint_freq=1)
+    summaries = query_transformers_for_summaries(n_papers=1000000, model_name="Qwen/Qwen2.5-7B-Instruct",
+                                                 prompt_fn=new_prompt_with_text,
+                                                 output_path="../data/llm_outputs/llm_summaries_pretty20_fields.pkl",
+                                                 model_params={
+                                                     "max_new_tokens": 512,
+                                                     "temperature": None,
+                                                     "top_k": None,
+                                                     "top_p": None,
+                                                     "repetition_penalty": 1.1,
+                                                     "do_sample": False},
+                                                 checkpoint_freq=10)
 
-    run_comparison(n_papers=100, delete_existing_outputs=True, run_inference=True)
+    # run_comparison(n_papers=100, delete_existing_outputs=False, run_inference=False)
 
 
     # load and parse the summaries
