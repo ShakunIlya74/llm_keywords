@@ -1,34 +1,14 @@
 import pandas as pd
 
+from code.mini_studies.hf_transformers.llama_summaries import given_fields_list
 from code.mini_studies.hf_transformers.summary_utils import parse_and_save_llm_outputs, read_dict_from_pkl
 
 
-given_fields_list = [
-    "Mathematics",
-    "Physics",
-    "Chemistry",
-    "Computer Science",
-    "Electrical Engineering",
-    "Engineering",
-    "Materials Science",
-    "Astronomy",
-    "Earth Science",
-    "Biology",
-    "Medicine",
-    "Economics",
-    "Political Science",
-    "Sociology",
-    "Psychology",
-    "Linguistics",
-    "Philosophy",
-    "History",
-    "Geography",
-    "Arts"
-]
+
 
 
 def check_summaries(row_summaries_path="../data/llm_outputs/llm_summaries_pretty20_fields.pkl",
-                    parsed_summaries_output="../data/llm_outputs/parsed_summaries/llm_summaries_20_fields_parsed_temp.pkl"):
+                    parsed_summaries_output="../data/llm_outputs/parsed_summaries/llm_summaries_20_fields_parsed.pkl"):
     parse_and_save_llm_outputs(row_summaries_path,
                                parsed_summaries_output)
     loaded_summaries = read_dict_from_pkl(parsed_summaries_output)

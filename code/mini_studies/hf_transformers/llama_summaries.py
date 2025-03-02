@@ -9,6 +9,30 @@ from code.mini_studies.hf_transformers.summary_utils import load_abstracts, writ
     parse_and_save_llm_outputs, read_dict_from_pkl, create_dirs_if_not_exist, read_dict
 
 
+given_fields_list = [
+    "Mathematics",
+    "Physics",
+    "Chemistry",
+    "Computer Science",
+    "Electrical Engineering",
+    "Engineering",
+    "Materials Science",
+    "Astronomy",
+    "Earth Science",
+    "Biology",
+    "Medicine",
+    "Economics",
+    "Political Science",
+    "Sociology",
+    "Psychology",
+    "Linguistics",
+    "Philosophy",
+    "History",
+    "Geography",
+    "Arts"
+]
+
+
 def prompt_with_text(text):
     prompt = f"""
     Task: Based on the abstract provided, extract and label the following key details. Follow the structure exactly, keeping answers brief and specific. 
