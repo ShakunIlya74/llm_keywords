@@ -1,7 +1,12 @@
 import json
 import pickle
 import re
+from pathlib import Path
 from typing import Dict, Optional, Any
+
+import pandas as pd
+
+SI_IPUT_DF_DIR = Path("../../scholar_inbox/data/scholar_map/llm_inputs")
 
 
 def write_dict_to_pkl(output_dict, output_path):
@@ -36,6 +41,17 @@ def load_abstracts(n_papers=None, path="../data/llm_inputs/paper_ids_text_pairs.
         paper_ids_text_pairs = list(paper_ids_text_pairs)[:n_papers]
     return paper_ids_text_pairs
 
+def load_texts(n_papers=None, path=Path(SI_IPUT_DF_DIR, "paper_texts_df.parquet")):
+    print(f"Loading texts from {path}")
+    # load the parquet df using the pyarrow engine to handle multidimensional values
+    df = pd.read_parquet(path)
+    if n_papers:
+        df = df.head(n_papers)
+    # parse, paper_id, title, abstract into tuples
+    paper_data_tuples = [(row.paper_id, row.title, row.abstract) for row in df.itertuples(index=False)]
+    return paper_data_tuples
+
+
 
 def parse_llm_outputs_flexible(outputs: Dict[int, str]) -> Dict[int, Dict[str, Optional[Any]]]:
     """
@@ -53,27 +69,39 @@ def parse_llm_outputs_flexible(outputs: Dict[int, str]) -> Dict[int, Dict[str, O
         "field of paper": [
             re.compile(r'field[_\s]*of[_\s]*paper\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
             re.compile(r'"Field of Paper"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Field\s*of\s*Paper\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
+            re.compile(r'Field\s*of\s*Paper\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'paper[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'"Paper Field"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
+
         ],
         "subfield": [
             re.compile(r'sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
             re.compile(r'"Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Subfield\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
+            re.compile(r'Subfield\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'paper[_\s]*sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'"Paper Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
         ],
         "sub subfield": [
             re.compile(r'sub[_\s]*sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
             re.compile(r'"Sub Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Sub\s*Subfield\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
+            re.compile(r'Sub\s*Subfield\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'paper[_\s]*sub[_\s]*sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'"Paper Sub Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
         ],
         "keywords": [
             re.compile(r'keywords\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
             re.compile(r'"Keywords"\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
-            re.compile(r'Keywords\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE)
+            re.compile(r'Keywords\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
+            re.compile(r'paper[_\s]*keywords\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
+            re.compile(r'"Paper Keywords"\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE)
         ],
         "method name  / shortname": [
             re.compile(r'method[_\s]*name[_\s*/]*shortname\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
             re.compile(r'"Method name / Shortname"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Method\s*Name\s*/\s*Shortname\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
+            re.compile(r'Method\s*Name\s*/\s*Shortname\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'paper[_\s]*method[_\s]*name\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'"Paper Method name"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
+            re.compile(r'paper[_\s]*method[_\s]*name[_\s]*shortname\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
         ]
     }
 
@@ -94,6 +122,7 @@ def parse_llm_outputs_flexible(outputs: Dict[int, str]) -> Dict[int, Dict[str, O
                 match = pattern.search(text)
                 if match:
                     value = match.group(1).strip()
+                    value = value.replace('*', '')
 
                     # Post-process keywords to convert to list if possible
                     if field == "keywords":
@@ -126,6 +155,10 @@ def parse_and_save_llm_outputs(output_path, save_to_path):
     parsed_results = parse_llm_outputs_flexible(outputs)
     write_dict_to_pkl(parsed_results, save_to_path)
     return parsed_results
+
+
+if __name__ == "__main__":
+    load_texts()
 
 
 
