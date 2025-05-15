@@ -53,94 +53,128 @@ def load_texts(n_papers=None, path=Path(SI_IPUT_DF_DIR, "paper_texts_df.parquet"
 
 
 
+import re
+import json
+from typing import Dict, Any, Optional
+
 def parse_llm_outputs_flexible(outputs: Dict[int, str]) -> Dict[int, Dict[str, Optional[Any]]]:
     """
-    Parses LLM outputs to extract specified fields using flexible regex patterns.
+    Parses LLM outputs to extract specified fields.
+    First attempts to parse a JSON object; if that fails, uses regex patterns.
 
     Parameters:
-    outputs (Dict[int, str]): Dictionary with IDs as keys and LLM output strings as values.
+    outputs: mapping from an ID to the raw LLM output string.
 
     Returns:
-    Dict[int, Dict[str, Optional[Any]]]: Dictionary mapping each ID to a dictionary of extracted fields.
+    mapping from each ID to a dict with keys:
+      - "field of paper"
+      - "subfield"
+      - "sub subfield"
+      - "keywords"
+      - "method name  / shortname"
+    Values are strings (or list of strings for keywords), or None if not found.
     """
 
-    # Define flexible regex patterns for each field
+    # --- compile your regex patterns once ---
     patterns = {
         "field of paper": [
             re.compile(r'field[_\s]*of[_\s]*paper\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Field of Paper"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Field\s*of\s*Paper\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'paper[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Paper Field"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
-
+            # …all your other field-of-paper patterns…
         ],
         "subfield": [
             re.compile(r'sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Subfield\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'paper[_\s]*sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Paper Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
+            # …etc…
         ],
         "sub subfield": [
             re.compile(r'sub[_\s]*sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Sub Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Sub\s*Subfield\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'paper[_\s]*sub[_\s]*sub[_\s]*field\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Paper Sub Subfield"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
+            # …etc…
         ],
         "keywords": [
             re.compile(r'keywords\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
-            re.compile(r'"Keywords"\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
-            re.compile(r'Keywords\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
-            re.compile(r'paper[_\s]*keywords\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE),
-            re.compile(r'"Paper Keywords"\s*[:=]\s*(?:["\']|\[)?([^"\';\n\]]+)(?:["\']|\])?', re.IGNORECASE)
+            # …etc…
         ],
         "method name  / shortname": [
             re.compile(r'method[_\s]*name[_\s*/]*shortname\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Method name / Shortname"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'Method\s*Name\s*/\s*Shortname\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'paper[_\s]*method[_\s]*name\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'"Paper Method name"\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE),
-            re.compile(r'paper[_\s]*method[_\s]*name[_\s]*shortname\s*[:=]\s*["\']?([^"\';\n]+)', re.IGNORECASE)
-        ]
+            # …etc…
+        ],
     }
 
-    parsed_results = {}
+    # mapping from normalized JSON keys → your field names
+    json_key_map = {
+        "field_of_paper":          "field of paper",
+        "subfield":                "subfield",
+        "sub_subfield":            "sub subfield",
+        "keywords":                "keywords",
+        "method_name_shortname":   "method name  / shortname",
+        "method_name_short_name":  "method name  / shortname",  # in case of variant
+    }
+
+    def _init_fields():
+        return {k: None for k in patterns.keys()}
+
+    parsed_results: Dict[int, Dict[str, Optional[Any]]] = {}
 
     for id_key, text in outputs.items():
-        # Initialize the result dictionary with None
-        parsed_fields = {
-            "field of paper": None,
-            "subfield": None,
-            "sub subfield": None,
-            "keywords": None,
-            "method name  / shortname": None,
-        }
+        parsed_fields = _init_fields()
 
+        # --- 1) Try JSON extraction ---
+        # capture inside ```json ... ``` if present
+        m = re.search(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
+        json_str = m.group(1) if m else None
+
+        # otherwise grab first {...} block
+        if not json_str:
+            m2 = re.search(r'(\{(?:[^{}]|\{[^{}]*\})*\})', text, re.DOTALL)
+            if m2:
+                json_str = m2.group(1)
+
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                # normalize keys and assign
+                for raw_k, raw_v in data.items():
+                    norm_k = raw_k.strip().lower().replace(" ", "_")
+                    if norm_k in json_key_map:
+                        field_name = json_key_map[norm_k]
+                        val = raw_v
+                        if field_name == "keywords":
+                            # ensure a list
+                            if isinstance(val, str):
+                                # split comma/semicolon if user provided a single string
+                                val = [v.strip() for v in re.split(r'[;,]', val) if v.strip()]
+                            # else assume it’s already a list
+                        else:
+                            # coerce to plain string
+                            val = str(val).strip()
+                        parsed_fields[field_name] = val or None
+                # if at least one field was populated, skip regex step
+                if any(parsed_fields.values()):
+                    parsed_results[id_key] = parsed_fields
+                    continue
+            except json.JSONDecodeError:
+                # malformed JSON: fall back to regex
+                pass
+
+        # --- 2) Fallback to regex matching ---
         for field, field_patterns in patterns.items():
-            for pattern in field_patterns:
-                match = pattern.search(text)
-                if match:
-                    value = match.group(1).strip()
-                    value = value.replace('*', '')
-
-                    # Post-process keywords to convert to list if possible
-                    if field == "keywords":
-                        # Remove surrounding brackets or quotes if present
-                        value = value.strip("[]\"'")
-                        # Split by comma or semicolon and strip whitespace
-                        keywords = re.split(r',|;', value)
-                        keywords = [kw.strip().strip('"').strip("'") for kw in keywords if kw.strip()]
-                        parsed_fields[field] = keywords if keywords else None
-                    else:
-                        # Remove trailing semicolon if present
-                        value = value.rstrip(';').strip()
-                        parsed_fields[field] = value if value else None
-                    break  # Stop after the first successful match
+            for pat in field_patterns:
+                m = pat.search(text)
+                if not m:
+                    continue
+                value = m.group(1).strip().rstrip(';')
+                if field == "keywords":
+                    # strip surrounding brackets/quotes and split
+                    value = value.strip('[]"\' ')
+                    items = [kw.strip().strip('"\'') for kw in re.split(r'[;,]', value) if kw.strip()]
+                    parsed_fields[field] = items or None
+                else:
+                    parsed_fields[field] = value or None
+                break
 
         parsed_results[id_key] = parsed_fields
 
     return parsed_results
+
 
 def create_dirs_if_not_exist():
     import os

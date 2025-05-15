@@ -2,7 +2,7 @@ import os
 import time
 import gc
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from modelscope import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 from code.mini_studies.hf_transformers.summary_utils import load_texts, write_dict_to_pkl, \
@@ -209,6 +209,139 @@ def new_prompt_with_text_v3_5(title, abstract):
     return prompt
 
 
+def new_prompt_with_text_v4_0(title, abstract):
+    prompt = f"""
+    You are an information extraction assistant.  
+    Given the following paper title and abstract, extract exactly these five fields and output _only_ a single valid JSON object (no explanations, no extra keys, no bullet points):
+    
+        1. "field_of_Paper"           – one of [Mathematics, Physics, Chemistry, Computer Science, Electrical Engineering, Engineering, Materials Science, Astronomy, Earth Science, Biology, Medicine, Economics, Political Science, Sociology, Psychology, Linguistics, Philosophy, History, Geography, Arts]
+        2. "subfield"                 – the main research category within the field
+        3. "sub_subfield"             – a narrower focus within the subfield
+        4. "keywords"                 – an array of 3–5 phrases (strings) describing core topics
+        5. "method_name_shortname"    – the main technique or model name proposed
+    
+    Use `null` (not an empty string) for any field you cannot identify.  
+    **Your output must be valid JSON**. Example format:
+    ```json
+    {{
+      "field_of_Paper": "Computer Science",
+      "subfield": "Natural Language Processing",
+      "sub_subfield": "Text Summarization",
+      "keywords": ["summarization", "transformer", "fine-tuning"],
+      "method_name_shortname": null
+    }}
+    Title: "{title}"
+    Abstract: "{abstract}"
+    """
+    return prompt
+
+
+def new_prompt_with_text_v4_1(title, abstract):
+    prompt = f"""
+    You are an expert information‐extraction assistant.  
+    Your task is to read the paper title and abstract below, pull out exactly these five pieces of information, and output _only_ a single valid JSON object—no explanations, no extra keys, no comments:
+    
+      • field_of_Paper           (string or null)  
+      • subfield                 (string or null)  
+      • sub_subfield             (string or null)  
+      • keywords                 (array of 3–5 strings or null)  
+      • method_name_shortname    (string or null)  
+    
+    **Rules:**  
+    1. Your output **must** be valid JSON.  
+    2. Use the exact key names above (in quotes).  
+    3. If you cannot identify a field, set its value to `null`.  
+    4. Do _not_ include any other fields or text.  
+    5. Choose `field_of_Paper` from exactly one of:
+       ["Mathematics","Physics","Chemistry","Computer Science","Electrical Engineering",
+        "Engineering","Materials Science","Astronomy","Earth Science","Biology",
+        "Medicine","Economics","Political Science","Sociology","Psychology",
+        "Linguistics","Philosophy","History","Geography","Arts"]
+    
+    **Output example**:  
+    ```json
+    {{
+      "field_of_Paper": "Computer Science",
+      "subfield": "Natural Language Processing",
+      "sub_subfield": "Text Summarization",
+      "keywords": ["summarization", "transformer", "fine-tuning"],
+      "method_name_shortname": null
+    }}
+    Now process this paper:
+    
+    Title: "{title}"
+    Abstract: "{abstract}"
+    """
+    return prompt
+
+
+def new_prompt_with_text_v4_1_5(title, abstract):
+    prompt = f"""
+    You are an expert information‐extraction assistant.  
+    Your task is to read the paper title and abstract below, pull out exactly these five pieces of information, and output _only_ a single valid JSON object—no explanations, no extra keys, no comments:
+
+      • field_of_Paper           (string or null)  
+      • subfield                 (string or null)  
+      • sub_subfield             (string or null)  
+      • keywords                 (array of 3–5 strings or null)  
+      • method_name_shortname    (string or null)  
+
+    **Rules:**  
+    1. Your output **must** be valid JSON.  
+    2. Use the exact key names above (in quotes).  
+    3. If you cannot identify a field, set its value to `null`.  
+    4. Do _not_ include any other fields or text.  
+    5. Choose `field_of_Paper` from exactly one of:
+       ["Mathematics","Physics","Chemistry","Computer Science","Electrical Engineering",
+        "Engineering","Materials Science","Astronomy","Earth Science","Biology",
+        "Medicine","Economics","Political Science","Sociology","Psychology",
+        "Linguistics","Philosophy","History","Geography","Arts"]
+
+    **Output json structure example**:  
+    ```json
+    {{
+      "field_of_Paper": null,
+      "subfield": null,
+      "sub_subfield": null,
+      "keywords": null,
+      "method_name_shortname": null
+    }}
+    ```
+    Now process this paper:
+
+    Title: "{title}"
+    Abstract: "{abstract}"
+    """
+    return prompt
+
+def new_prompt_with_text_v4_2(title, abstract):
+    prompt = f"""
+    You are an expert information‐extraction assistant.
+    
+    Your task is to read the paper title and abstract below and extract exactly these five fields, outputting _only_ a single valid JSON object in this exact structure (replace the empty placeholders with real values or `null` if unavailable, and do not include any extra text or keys):
+    
+    ```json
+    {{
+      "field_of_Paper": "",
+      "subfield": "",
+      "sub_subfield": "",
+      "keywords": [],
+      "method_name_shortname": ""
+    }}
+    ```
+    Choose field_of_Paper from exactly one of:
+    ["Mathematics","Physics","Chemistry","Computer Science","Electrical Engineering",
+    "Engineering","Materials Science","Astronomy","Earth Science","Biology",
+    "Medicine","Economics","Political Science","Sociology","Psychology",
+    "Linguistics","Philosophy","History","Geography","Arts"]
+    
+    Title: "{title}"
+    Abstract: "{abstract}"
+    """
+    return prompt
+
+
+
 def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-Instruct", prompt_fn=prompt_with_text,
                                      output_path="../data/llm_outputs/llm_summaries.pkl",
                                      checkpoint_freq=10,
@@ -293,11 +426,125 @@ def query_transformers_for_summaries(n_papers=10, model_name="Qwen/Qwen2.5-7B-In
     return output_dict
 
 
+import os
+import time
+import torch
+
+
+def query_qwen3_for_summaries(
+    n_papers: int = 10,
+    # model_name: str = "Qwen/Qwen3-8B",
+    model_name: str = "Qwen/Qwen3-1.7B",
+    prompt_fn = prompt_with_text,
+    output_path: str = "../data/llm_outputs/llm_summaries_qwen3.pkl",
+    checkpoint_freq: int = 10,
+    model_params: dict = {
+        "max_new_tokens": 512,
+        "temperature": None,
+        "top_k": None,
+        "top_p": None,
+        "repetition_penalty": None,
+        "do_sample": False,
+    }
+):
+    """
+    Query a Qwen 3 transformer model (with thinking‐mode) to generate summaries (labels + keywords)
+    for a given set of papers. Returns a dict mapping paper_id to:
+      {
+        "thinking": <chain‐of‐thought trace>,
+        "content":  <final summary>
+      }
+    """
+    create_dirs_if_not_exist()
+    paper_data = load_texts(n_papers)
+
+    # resume if file exists
+    if os.path.exists(output_path):
+        print(f"Resuming from {output_path}")
+        done = read_dict(output_path)
+        seen = set(done.keys())
+        paper_data = [(pid, t, a) for pid, t, a in paper_data if pid not in seen]
+        output = done
+    else:
+        output = {}
+
+    # load tokenizer + model
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype="auto",
+        device_map="auto"     # automatic sharding over GPUs/CPU
+    )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = model.to(device)
+
+    # special token id for </think>
+    end_think_id = tokenizer.convert_tokens_to_ids("</think>")
+
+    for i, (paper_id, title, abstract) in enumerate(paper_data):
+        if i % checkpoint_freq == 0:
+            print(f"Processing {i+1}/{len(paper_data)} ({100*(i+1)/len(paper_data):.1f}%)")
+        # build prompt and apply chat template
+        prompt = prompt_fn(title, abstract)
+        messages = [{"role": "user", "content": prompt}]
+        text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False
+        )
+        inputs = tokenizer([text], return_tensors="pt").to(device)
+
+        # generate
+        tic = time.time()
+        with torch.no_grad():
+            out_ids = model.generate(**inputs, **model_params)[0]
+        toc = time.time()
+
+        # strip off the input tokens
+        gen_ids = out_ids[len(inputs.input_ids[0]):].tolist()
+
+        # split thinking vs content
+        try:
+            # find the last </think>
+            idx = len(gen_ids) - gen_ids[::-1].index(end_think_id)
+        except ValueError:
+            idx = 0
+
+        think_ids   = gen_ids[:idx]
+        content_ids = gen_ids[idx:]
+
+        thinking = tokenizer.decode(think_ids,   skip_special_tokens=True).strip()
+        content  = tokenizer.decode(content_ids, skip_special_tokens=True).strip()
+
+        # store both
+        # output[paper_id] = {
+        #     "thinking": thinking,
+        #     "content": content
+        # }
+        output[paper_id] = content
+
+        print(f"Paper {paper_id} done in {toc-tic:.2f}s\nTHINKING:\n{thinking}\n\nFINAL:\n{content}\n")
+
+        # checkpoint
+        if (i+1) % checkpoint_freq == 0:
+            write_dict_to_pkl(output, output_path)
+
+    # final save & cleanup
+    write_dict_to_pkl(output, output_path)
+    del model, tokenizer
+    torch.cuda.empty_cache()
+
+    return output
+
+
+
 def compare_two_runs(n_papers,
                      model_params1, model_params2,
                      prompt_fn1, prompt_fn2,
                      output_path1, output_path2,
-                     model_name="Qwen/Qwen2.5-7B-Instruct",
+                     model_name1="Qwen/Qwen2.5-7B-Instruct",
+                     model_name2="Qwen/Qwen3-1.7B",
                      paper_ids_text_pairs_path="../data/llm_inputs/paper_ids_text_pairs.pkl",
                      checkpoint_freq=10,
                      run_inference1=True, run_inference2=True):
@@ -329,7 +576,7 @@ def compare_two_runs(n_papers,
         start_time_run1 = time.time()
         outputs1 = query_transformers_for_summaries(
             n_papers=n_papers,
-            model_name=model_name,
+            model_name=model_name1,
             prompt_fn=prompt_fn1,
             output_path=output_path1,
             checkpoint_freq=checkpoint_freq,
@@ -348,9 +595,9 @@ def compare_two_runs(n_papers,
         if os.path.exists(output_path2):
             os.remove(output_path2)
         start_time_run2 = time.time()
-        outputs2 = query_transformers_for_summaries(
+        outputs2 = query_qwen3_for_summaries(
             n_papers=n_papers,
-            model_name=model_name,
+            model_name=model_name2,
             prompt_fn=prompt_fn2,
             output_path=output_path2,
             checkpoint_freq=checkpoint_freq,
@@ -419,7 +666,7 @@ def run_comparison(n_papers=10, run_inference1=True, run_inference2=True):
         "do_sample": False}
 
     prompt_fn1 = new_prompt_with_text_v3_0
-    prompt_fn2 = new_prompt_with_text_v3_5
+    prompt_fn2 = new_prompt_with_text_v4_2
 
     output_path1 = "../data/llm_outputs/llm_summaries_test1.pkl"
     output_path2 = "../data/llm_outputs/llm_summaries_test2.pkl"
@@ -448,8 +695,8 @@ if __name__ == '__main__':
     #                                                  "do_sample": False},
     #                                              checkpoint_freq=10)
 
-    run_comparison(n_papers=10, run_inference1=True, run_inference2=True)
-
+    run_comparison(n_papers=10, run_inference1=False, run_inference2=True)
+    # print(new_prompt_with_text_v4_0(1, 2))
 
     # load and parse the summaries
     # parse_and_save_llm_outputs("../data/llm_outputs/llm_summaries_transformers.pkl", "../data/llm_outputs/llm_summaries_transformers_parsed.pkl")
